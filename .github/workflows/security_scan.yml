@@ -35,7 +35,7 @@ jobs:
         run: curl -I http://3.129.253.217:3000 || echo "❌ Failed to connect to EC2"
 
       - name: Create Output Directory
-        run: mkdir -p $PWD/zap_output
+        run: mkdir -p zap_output
 
       - name: Run OWASP ZAP Scan
         run: |
@@ -61,14 +61,18 @@ jobs:
 
       - name: Verify ZAP Report Exists After Scan
         run: |
-          if [ ! -f "$PWD/zap_output/zap_report.html" ]; then
-            echo "❌ ZAP report not found! Here are the contents of zap_output:"
-            ls -lah $PWD/zap_output
+          if [ ! -f "zap_output/zap_report.html" ]; then
+            echo "❌ ZAP report not found! Listing contents of zap_output:"
+            ls -lah zap_output
             exit 1
           fi
 
-    outputs:
-      zap_report_path: $PWD/zap_output/zap_report.html
+      - name: Upload ZAP Report as Artifact (for debugging)
+        uses: actions/upload-artifact@v3
+        with:
+          name: zap_scan_report
+          path: zap_output/zap_report.html
+          retention-days: 7
 
   upload_results:
     runs-on: ubuntu-latest
@@ -84,14 +88,20 @@ jobs:
           role-to-assume: arn:aws:iam::615299768374:role/GitHubActionsSecurityRole
           aws-region: us-east-2
 
+      - name: Download Scan Report from Previous Job
+        uses: actions/download-artifact@v3
+        with:
+          name: zap_scan_report
+          path: zap_output
+
       - name: Debug: Ensure Report Exists Before Upload
         run: |
-          if [ ! -f "$PWD/zap_output/zap_report.html" ]; then
+          if [ ! -f "zap_output/zap_report.html" ]; then
             echo "❌ ZAP report not found! Listing contents:"
-            ls -lah $PWD/zap_output
+            ls -lah zap_output
             exit 1
           fi
 
       - name: Upload Scan Results to AWS S3
         run: |
-          aws s3 cp $PWD/zap_output/zap_report.html s3://secure-web-scan-results/zap_report.html
+          aws s3 cp zap_output/zap_report.html s3://secure-web-scan-results/zap_report.html
