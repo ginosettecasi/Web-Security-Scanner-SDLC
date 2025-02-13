@@ -15,11 +15,10 @@ permissions:
 jobs:
   security_scan:
     runs-on: ubuntu-latest
+
     steps:
-      - name: Checkout Code (Minimal Fetch)
+      - name: Checkout Code
         uses: actions/checkout@v3
-        with:
-          fetch-depth: 1  # Fetch only the latest commit to speed up checkout
 
       - name: Configure AWS Credentials
         uses: aws-actions/configure-aws-credentials@v2
@@ -28,44 +27,23 @@ jobs:
           aws-region: us-east-2
 
       - name: Test Connection to EC2 (Ensure GitHub Actions Can Reach the App)
-        run: curl -I --max-time 5 http://172.31.14.30:3000 || echo "Failed to connect"
+        run: curl -I http://172.31.14.30:3000 || echo "Failed to connect"
 
-      - name: Set Up Python Dependencies Cache (For Snyk)
-        uses: actions/cache@v3
+      - name: Run OWASP ZAP Passive Scan (Optimized)
+        uses: zaproxy/action-full-scan@v0.5.0
         with:
-          path: ~/.cache/pip
-          key: ${{ runner.os }}-pip-${{ hashFiles('**/requirements.txt') }}
-          restore-keys: |
-            ${{ runner.os }}-pip-
+          target: 'http://172.31.14.30:3000'
+          docker_name: 'ghcr.io/zaproxy/zaproxy:stable'
+          cmd_options: '-m 0 -r /zap/wrk/output/zap_report.html -z "-config scanner.attackMode=off -config passiveScan.enable=true -config spider.maxDepth=0 -config ajaxSpider.enable=false -config passiveScan.maxAlertsPerRule=3 -config api.debug=false -config connection.requestTimeout=3000 -config connection.timeoutInSecs=10 -config scanner.threadPerHost=2"'
 
-      - name: Install Python Dependencies (For Snyk Scan)
-        run: pip install -r requirements.txt
-
-      - name: Run OWASP ZAP Passive Scan (Optimized) 🚀
-        run: |
-          docker run --rm --network host \
-          -v $(pwd)/zap_output:/zap/wrk/ \
-          ghcr.io/zaproxy/zaproxy:stable \
-          zap.sh -cmd -quickurl http://172.31.14.30:3000 \
-          -quickout /zap/wrk/zap_report.html \
-          -config passiveScan.enable=true \
-          -config passiveScan.maxAlertsPerRule=3 \
-          -config api.debug=false \
-          -config connection.requestTimeout=3000 \
-          -config connection.timeoutInSecs=10 \
-          -config scanner.threadPerHost=4 &
-
-      - name: Run Snyk Dependency Scan (Optimized) ⚡
+      - name: Run Snyk Dependency Scan (Optimized)
         uses: snyk/actions/python@master
         env:
           SNYK_TOKEN: ${{ secrets.SNYK_TOKEN }}
         with:
-          args: --file=requirements.txt --fail-on=upgradable --severity-threshold=high --prune-repeated-subdependencies --json > snyk_scan.json &
+          args: --file=requirements.txt --fail-on=upgradable --severity-threshold=high --prune-repeated-subdependencies
 
-      - name: Wait for Security Scans to Finish ⏳
-        run: wait  # Ensures both scans complete before proceeding
-
-      - name: Upload Scan Results to AWS S3 📤
+      - name: Upload Scan Results to AWS S3
         run: |
-          aws s3 cp zap_output/zap_report.html s3://secure-web-scan-results/zap_report.html --only-show-errors
-          aws s3 cp snyk_scan.json s3://secure-web-scan-results/snyk_scan.json --only-show-errors
+          aws s3 cp /zap/wrk/output/zap_report.html s3://secure-web-scan-results/zap_report.html
+          aws s3 cp snyk_scan.json s3://secure-web-scan-results/snyk_scan.json
