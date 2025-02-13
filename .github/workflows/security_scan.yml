@@ -34,8 +34,7 @@ jobs:
         with:
           target: 'http://172.31.14.30:3000'
           docker_name: 'ghcr.io/zaproxy/zaproxy:stable'
-          rules_file_name: '.zap_rules'
-          cmd_options: '-m 0 -r zap_report.html -z "-config scanner.attackMode=off -config passiveScan.enable=true -config spider.maxDepth=0 -config ajaxSpider.enable=false -config passiveScan.maxAlertsPerRule=5 -config api.debug=true"'
+          cmd_options: '-m 0 -r /zap/wrk/output/zap_report.html -z "-config scanner.attackMode=off -config passiveScan.enable=true -config spider.maxDepth=0 -config ajaxSpider.enable=false -config passiveScan.maxAlertsPerRule=3 -config api.debug=false -config connection.requestTimeout=3000 -config connection.timeoutInSecs=10 -config scanner.threadPerHost=2"'
 
       - name: Run Snyk Dependency Scan (Single File Only)
         uses: snyk/actions/python@master
@@ -46,5 +45,5 @@ jobs:
 
       - name: Upload Scan Results to AWS S3
         run: |
-          aws s3 cp zap_scan.json s3://secure-web-scan-results/zap_scan.json
+          aws s3 cp /zap/wrk/output/zap_report.html s3://secure-web-scan-results/zap_report.html
           aws s3 cp snyk_scan.json s3://secure-web-scan-results/snyk_scan.json
