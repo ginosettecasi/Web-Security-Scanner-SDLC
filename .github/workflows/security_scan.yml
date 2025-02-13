@@ -31,6 +31,10 @@ jobs:
         with:
           role-to-assume: ${{ secrets.AWS_ROLE_TO_ASSUME }}
           aws-region: ${{ env.AWS_REGION }}
+          role-session-name: GitHubActionsSession
+
+      - name: Verify AWS Credentials
+        run: aws sts get-caller-identity
 
       - name: Create Output Directory
         run: mkdir -p output
