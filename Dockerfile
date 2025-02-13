@@ -1,19 +1,26 @@
-# ⚠️ Use a more stable Python version (Python 3.7 instead of 3.6)
-FROM python:3.7
+# ⚠️ Using a more stable Python version
+FROM python:3.8
 
 # Set working directory
 WORKDIR /app
 
-# Copy application files first
+# Copy application files
 COPY app.py /app/app.py
 COPY requirements.txt /app/requirements.txt
 
 # Debug: Check if requirements.txt exists
-RUN ls -l /app/requirements.txt
+RUN ls -l /app/
 
-# Upgrade pip and install dependencies
-RUN pip install --upgrade pip
-RUN pip install --no-cache-dir -r /app/requirements.txt
+# Ensure pip is installed and updated
+RUN python -m ensurepip
+RUN python -m pip install --upgrade pip
+
+# Debug: Check pip and Python versions
+RUN python -m pip --version
+RUN python --version
+
+# Install dependencies from requirements.txt
+RUN python -m pip install --no-cache-dir -r /app/requirements.txt
 
 # Expose application port
 EXPOSE 5000
