@@ -23,19 +23,17 @@ RUN apt-get update && apt-get install -y \
     curl \
     unzip \
     make \
-    build-essential
+    build-essential \
+    nodejs \
+    npm  # Add Node.js & npm to install Snyk
 
 # Upgrade pip and install dependencies
 RUN python -m ensurepip
 RUN python -m pip install --no-cache-dir --upgrade pip setuptools wheel
+RUN python -m pip install --no-cache-dir -r /app/requirements.txt
 
-# 🔥 Critical Debugging: Capture Full pip Install Logs
-RUN python -m pip install --no-cache-dir -r /app/requirements.txt --verbose > /app/pip_install.log 2>&1 || \
-    (echo "❌ PIP INSTALL FAILED! Dumping logs..." && \
-    python -m pip --version && \
-    python --version && \
-    cat /app/pip_install.log && \
-    exit 1)
+# 🔥 Install Snyk Separately Using npm
+RUN npm install -g snyk
 
 # Expose application port
 EXPOSE 5000
