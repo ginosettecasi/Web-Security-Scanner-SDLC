@@ -1,4 +1,4 @@
-name: Secure Dependency & Container Scan
+name: Secure Web Security Scan
 
 on:
   push:
@@ -12,30 +12,27 @@ permissions:
   id-token: write
   contents: read
 
-env:
-  AWS_S3_BUCKET: secure-web-scan-results
-  AWS_REGION: us-east-2
-
 jobs:
-  snyk_security_scan:
+  setup_environment:
     runs-on: ubuntu-latest
-    timeout-minutes: 20
 
     steps:
       - name: Checkout Code
-        uses: actions/checkout@v4
+        uses: actions/checkout@v4  # Updated to v4
 
       - name: Configure AWS Credentials
         uses: aws-actions/configure-aws-credentials@v2
         with:
-          role-to-assume: ${{ secrets.AWS_ROLE_TO_ASSUME }}
-          aws-region: ${{ env.AWS_REGION }}
-          role-session-name: GitHubActionsSession
+          role-to-assume: arn:aws:iam::615299768374:role/GitHubActionsSecurityRole
+          aws-region: us-east-2
 
       - name: Verify AWS Credentials
         run: aws sts get-caller-identity
 
-      - name: Set Up Snyk CLI
+      - name: Create Output Directory
+        run: mkdir -p output
+
+      - name: Install Snyk CLI
         run: |
           curl -Lo snyk https://github.com/snyk/snyk/releases/latest/download/snyk-linux
           chmod +x snyk
@@ -46,19 +43,42 @@ jobs:
 
       - name: Run Snyk Code Scan (Static Analysis)
         continue-on-error: true
-        run: snyk code test --json > snyk_code_results.json
+        run: snyk code test --json > output/snyk_code_results.json
 
       - name: Run Snyk Dependency Scan
         continue-on-error: true
-        run: snyk test --all-projects --json > snyk_dependency_results.json
+        run: snyk test --all-projects --json > output/snyk_dependency_results.json
 
       - name: Run Snyk Container Scan (if using Docker)
         continue-on-error: true
-        run: snyk container test your-docker-image:latest --json > snyk_container_results.json || echo "No container image found."
+        run: snyk container test your-docker-image:latest --json > output/snyk_container_results.json || echo "No container image found."
+
+      - name: Upload Snyk Scan Reports as Artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: snyk_scan_reports
+          path: output/
+          compression-level: 0  # Prevents unnecessary compression
+
+  upload_results:
+    runs-on: ubuntu-latest
+    needs: setup_environment
+
+    steps:
+      - name: Download Scan Reports
+        uses: actions/download-artifact@v4
+        with:
+          name: snyk_scan_reports
+          path: output
+
+      - name: Configure AWS Credentials
+        uses: aws-actions/configure-aws-credentials@v2
+        with:
+          role-to-assume: arn:aws:iam::615299768374:role/GitHubActionsSecurityRole
+          aws-region: us-east-2
 
       - name: Upload Scan Results to AWS S3
-        if: success()
         run: |
-          aws s3 cp snyk_code_results.json s3://${{ env.AWS_S3_BUCKET }}/snyk_code_results.json
-          aws s3 cp snyk_dependency_results.json s3://${{ env.AWS_S3_BUCKET }}/snyk_dependency_results.json
-          aws s3 cp snyk_container_results.json s3://${{ env.AWS_S3_BUCKET }}/snyk_container_results.json || echo "No container scan results to upload."
+          aws s3 cp output/snyk_code_results.json s3://secure-web-scan-results/snyk_code_results.json
+          aws s3 cp output/snyk_dependency_results.json s3://secure-web-scan-results/snyk_dependency_results.json
+          aws s3 cp output/snyk_container_results.json s3://secure-web-scan-results/snyk_container_results.json || echo "No container scan results to upload."
