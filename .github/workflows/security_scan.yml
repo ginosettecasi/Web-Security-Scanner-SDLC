@@ -29,12 +29,10 @@ jobs:
       - name: Create Output Directory
         run: mkdir -p output
 
-      - name: Run OWASP ZAP Scan
+      - name: Run OWASP ZAP Scan in Headless Mode
         run: |
           docker run --rm -v $(pwd)/output:/zap/wrk ghcr.io/zaproxy/zaproxy:stable zap.sh \
-            -quickurl http://3.129.253.217:3000 \
-            -quickprogress \
-            -quickout /zap/wrk/zap_report.html
+            -cmd -quickurl http://3.129.253.217:3000 -quickout /zap/wrk/zap_report.html
 
       - name: Verify Scan Report Exists
         run: ls -lh output && cat output/zap_report.html || (echo "❌ Report file missing" && exit 1)
