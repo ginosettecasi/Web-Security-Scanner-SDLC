@@ -1,5 +1,5 @@
-# ⚠️ Intentionally Using an Outdated Python Version for Educational Purposes
-FROM python:3.6
+# ⚠️ Use a more stable Python version (Python 3.7 instead of 3.6)
+FROM python:3.7
 
 # Set working directory
 WORKDIR /app
@@ -8,10 +8,11 @@ WORKDIR /app
 COPY app.py /app/app.py
 COPY requirements.txt /app/requirements.txt
 
-# Ensure dependencies are installed
-RUN ls -l /app/requirements.txt  # Debugging step
+# Debug: Check if requirements.txt exists
+RUN ls -l /app/requirements.txt
 
-# Install outdated dependencies (deliberate vulnerabilities)
+# Upgrade pip and install dependencies
+RUN pip install --upgrade pip
 RUN pip install --no-cache-dir -r /app/requirements.txt
 
 # Expose application port
