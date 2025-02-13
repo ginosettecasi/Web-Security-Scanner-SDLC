@@ -1,6 +1,5 @@
 boto3
 Flask==2.2.5
 requests==2.31.0
-snyk
 setuptools
 wheel
