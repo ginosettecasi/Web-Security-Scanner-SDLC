@@ -22,8 +22,8 @@ jobs:
 
       - name: Check Docker Installation
         run: |
-          docker --version || echo "Docker is not installed!"
-          docker info || echo "Docker is not running!"
+          docker --version || echo "❌ Docker is not installed!"
+          docker info || echo "❌ Docker is not running!"
 
       - name: Configure AWS Credentials
         uses: aws-actions/configure-aws-credentials@v2
@@ -40,7 +40,17 @@ jobs:
           docker run --rm -v $(pwd):/zap/wrk ghcr.io/zaproxy/zaproxy:stable zap.sh \
             -quickurl http://3.129.253.217:3000 \
             -quickprogress \
-            -cmd "-config scanner.attackMode=off -config passiveScan.enable=true"
+            -quickout /zap/wrk/output/zap_report.html \
+            -cmd \
+            -config scanner.attackMode=false \
+            -config passiveScan.enable=true \
+            -config spider.maxDepth=1 \
+            -config ajaxSpider.enable=false \
+            -config passiveScan.maxAlertsPerRule=3 \
+            -config api.debug=false \
+            -config connection.requestTimeout=2000 \
+            -config connection.timeoutInSecs=5 \
+            -config scanner.threadPerHost=1
 
   upload_results:
     runs-on: ubuntu-latest
