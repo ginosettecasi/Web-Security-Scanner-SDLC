@@ -34,9 +34,6 @@ jobs:
       - name: Verify AWS Credentials
         run: aws sts get-caller-identity
 
-      - name: Create Output Directory
-        run: mkdir -p output
-
       - name: Install Snyk CLI
         run: |
           curl -Lo snyk https://github.com/snyk/snyk/releases/latest/download/snyk-linux
@@ -46,45 +43,13 @@ jobs:
       - name: Authenticate Snyk
         run: snyk auth ${{ secrets.SNYK_TOKEN }}
 
-      - name: Run Snyk Code Scan (Static Analysis)
+      - name: Build Docker Image in GitHub Actions
+        run: docker build -t vulnerable-app .
+
+      - name: Run Snyk Container Scan
         continue-on-error: true
-        run: snyk code test --json > output/snyk_code_results.json
-
-      - name: Run Snyk Dependency Scan
-        continue-on-error: true
-        run: snyk test --all-projects --json > output/snyk_dependency_results.json
-
-      - name: Build and Scan Docker Image
-        run: |
-          docker build -t vulnerable-app .
-          snyk container test vulnerable-app --json > output/snyk_container_results.json || echo "No container image found."
-
-      - name: Upload Snyk Scan Reports as Artifacts
-        uses: actions/upload-artifact@v4
-        with:
-          name: snyk_scan_reports
-          path: output/
-          compression-level: 0
-
-  upload_results:
-    runs-on: ubuntu-latest
-    needs: setup_environment
-
-    steps:
-      - name: Download Scan Reports
-        uses: actions/download-artifact@v4
-        with:
-          name: snyk_scan_reports
-          path: output
-
-      - name: Configure AWS Credentials
-        uses: aws-actions/configure-aws-credentials@v2
-        with:
-          role-to-assume: ${{ secrets.AWS_ROLE_TO_ASSUME }}
-          aws-region: ${{ env.AWS_REGION }}
+        run: snyk container test vulnerable-app --json > output/snyk_container_results.json || echo "No container image found."
 
       - name: Upload Scan Results to AWS S3
         run: |
-          aws s3 cp output/snyk_code_results.json s3://${{ env.AWS_S3_BUCKET }}/snyk_code_results.json
-          aws s3 cp output/snyk_dependency_results.json s3://${{ env.AWS_S3_BUCKET }}/snyk_dependency_results.json
-          aws s3 cp output/snyk_container_results.json s3://${{ env.AWS_S3_BUCKET }}/snyk_container_results.json || echo "No container scan results to upload."
+          aws s3 cp output/snyk_container_results.json s3://${{ env.AWS_S3_BUCKET }}/snyk_container_results.json
