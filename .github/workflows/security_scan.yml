@@ -19,7 +19,6 @@ env:
 
 jobs:
   security_scan:
-    name: Security Scan
     runs-on: ubuntu-latest
     timeout-minutes: 30
 
@@ -30,7 +29,7 @@ jobs:
       - name: Configure AWS Credentials
         uses: aws-actions/configure-aws-credentials@v2
         with:
-          role-to-assume: ${{ secrets.AWS_ROLE_TO_ASSUME }}
+          role-to-assume: arn:aws:iam::615299768374:role/GitHubActionsSecurityRole
           aws-region: ${{ env.AWS_REGION }}
 
       - name: Create Output Directory
