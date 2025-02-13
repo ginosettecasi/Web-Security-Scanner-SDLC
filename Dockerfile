@@ -1,5 +1,5 @@
-# ⚠️ Using a more stable Python version
-FROM python:3.8
+# ⚠️ Using the most up-to-date stable Python version
+FROM python:3.12
 
 # Set working directory
 WORKDIR /app
@@ -24,3 +24,4 @@ EXPOSE 5000
 
 # Run the Flask app
 CMD ["python", "/app/app.py"]
+
