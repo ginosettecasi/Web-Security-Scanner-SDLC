@@ -20,16 +20,28 @@ jobs:
       - name: Checkout Code
         uses: actions/checkout@v3
 
-      - name: Set Up Docker
+      - name: Remove Conflicting Docker Packages (If Any)
+        run: |
+          sudo apt-get remove -y containerd containerd.io docker docker-engine docker.io docker-ce docker-ce-cli
+          sudo apt-get autoremove -y
+          sudo rm -rf /var/lib/docker /etc/docker
+          sudo groupdel docker || true
+
+      - name: Install Docker (Fixed)
         run: |
           sudo apt-get update
-          sudo apt-get install -y docker.io
-          sudo usermod -aG docker $USER
-          newgrp docker
+          sudo apt-get install -y ca-certificates curl gnupg lsb-release
+          sudo mkdir -m 0755 -p /etc/apt/keyrings
+          curl -fsSL https://download.docker.com/linux/ubuntu/gpg | sudo tee /etc/apt/keyrings/docker.asc > /dev/null
+          echo "deb [arch=$(dpkg --print-architecture) signed-by=/etc/apt/keyrings/docker.asc] https://download.docker.com/linux/ubuntu $(lsb_release -cs) stable" | sudo tee /etc/apt/sources.list.d/docker.list > /dev/null
+          sudo apt-get update
+          sudo apt-get install -y docker-ce docker-ce-cli containerd.io
 
       - name: Grant Docker Permissions
         run: |
           sudo chmod 666 /var/run/docker.sock
+          sudo usermod -aG docker $USER
+          newgrp docker
 
       - name: Test Docker Installation
         run: docker --version
