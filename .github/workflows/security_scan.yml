@@ -64,7 +64,6 @@ jobs:
         with:
           role-to-assume: arn:aws:iam::615299768374:role/GitHubActionsSecurityRole
           aws-region: us-east-2
-        retry: 3
 
       - name: Debug EC2 Connectivity
         run: |
