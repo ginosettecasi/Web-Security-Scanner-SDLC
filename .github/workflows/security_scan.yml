@@ -12,9 +12,16 @@ permissions:
   id-token: write
   contents: read
 
+env:
+  SCAN_URL: http://3.129.253.217:3000
+  AWS_S3_BUCKET: secure-web-scan-results
+  AWS_REGION: us-east-2
+
 jobs:
   security_scan:
+    name: Security Scan
     runs-on: ubuntu-latest
+    timeout-minutes: 30
 
     steps:
       - name: Checkout Code
@@ -23,25 +30,52 @@ jobs:
       - name: Configure AWS Credentials
         uses: aws-actions/configure-aws-credentials@v2
         with:
-          role-to-assume: arn:aws:iam::615299768374:role/GitHubActionsSecurityRole
-          aws-region: us-east-2
+          role-to-assume: ${{ secrets.AWS_ROLE_TO_ASSUME }}
+          aws-region: ${{ env.AWS_REGION }}
 
       - name: Create Output Directory
         run: mkdir -p output
 
       - name: Start OWASP ZAP in Daemon Mode
         run: |
-          docker run -d --name zap -v $(pwd)/output:/zap/wrk \
+          docker run -d --name zap -p 8080:8080 -v $(pwd)/output:/zap/wrk \
             ghcr.io/zaproxy/zaproxy:stable zap.sh -daemon -host 0.0.0.0 -port 8080
-          sleep 10  # Give ZAP time to start
+          echo "Waiting for ZAP to start..."
+          for i in {1..30}; do
+            if curl -s http://localhost:8080; then
+              echo "✅ ZAP is ready!"
+              break
+            fi
+            echo "⏳ Waiting for ZAP to be available ($i/30)..."
+            sleep 5
+            if [ $i -eq 30 ]; then
+              echo "❌ ZAP failed to start"
+              exit 1
+            fi
+          done
 
-      - name: Run Active Scan via ZAP API
+      - name: Run Quick Scan via ZAP API
         run: |
-          curl "http://localhost:8080/JSON/ascan/action/scan/?url=http://3.129.253.217:3000"
-          sleep 60  # Wait for scan to complete (adjust time if needed)
+          echo "Starting quick scan on ${{ env.SCAN_URL }}..."
+          curl "http://localhost:8080/JSON/spider/action/scan/?url=${{ env.SCAN_URL }}"
+          echo "Waiting for scan to complete..."
+          for i in {1..60}; do
+            scan_status=$(curl -s "http://localhost:8080/JSON/spider/view/status/")
+            if [ "$scan_status" == "100" ]; then
+              echo "✅ Scan completed!"
+              break
+            fi
+            echo "⏳ Scan in progress ($i/60)..."
+            sleep 2
+            if [ $i -eq 60 ]; then
+              echo "❌ Scan did not complete successfully"
+              exit 1
+            fi
+          done
 
       - name: Generate ZAP Report
         run: |
+          echo "Generating ZAP report..."
           curl "http://localhost:8080/OTHER/core/other/htmlreport/" -o output/zap_report.html
 
       - name: Stop OWASP ZAP
@@ -51,4 +85,5 @@ jobs:
         run: ls -lh output && cat output/zap_report.html || (echo "❌ Report file missing" && exit 1)
 
       - name: Upload Scan Results to AWS S3
-        run: aws s3 cp output/zap_report.html s3://secure-web-scan-results/zap_report.html
+        if: success()
+        run: aws s3 cp output/zap_report.html s3://${{ env.AWS_S3_BUCKET }}/zap_report.html
