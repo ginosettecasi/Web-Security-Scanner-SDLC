@@ -1,0 +1,38 @@
+name: Secure Web Security Scan
+
+on:
+  push:
+    branches:
+      - main
+
+permissions:
+  id-token: write
+  contents: read
+
+jobs:
+  security_scan:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Configure AWS Credentials
+        uses: aws-actions/configure-aws-credentials@v2
+        with:
+          role-to-assume: arn:aws:iam::YOUR_AWS_ACCOUNT_ID:role/YOUR_GITHUB_ACTIONS_ROLE
+          aws-region: us-east-2
+
+      - name: Checkout Code
+        uses: actions/checkout@v3
+
+      - name: Run OWASP ZAP Scan
+        uses: zaproxy/action-full-scan@v0.4.0
+        with:
+          target: 'https://example.com' # Replace with your web app URL
+
+      - name: Run Snyk Dependency Scan
+        uses: snyk/actions/python@master
+        env:
+          SNYK_TOKEN: ${{ secrets.SNYK_TOKEN }}
+
+      - name: Upload Scan Results to Secure S3
+        run: |
+          aws s3 cp zap_scan.json s3://secure-web-scan-results/zap_scan.json
+          aws s3 cp snyk_scan.json s3://secure-web-scan-results/snyk_scan.json
