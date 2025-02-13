@@ -48,8 +48,15 @@ jobs:
 
       - name: Run Snyk Container Scan
         continue-on-error: true
-        run: snyk container test vulnerable-app --json > output/snyk_container_results.json || echo "No container image found."
+        run: |
+          mkdir -p output  # Ensure the output directory exists
+          snyk container test vulnerable-app --json > output/snyk_container_results.json || \
+          (echo "⚠️ Snyk scan failed or found no vulnerabilities" && touch output/snyk_container_results.json)
 
       - name: Upload Scan Results to AWS S3
         run: |
-          aws s3 cp output/snyk_container_results.json s3://${{ env.AWS_S3_BUCKET }}/snyk_container_results.json
+          if [ -f output/snyk_container_results.json ]; then
+            aws s3 cp output/snyk_container_results.json s3://${{ env.AWS_S3_BUCKET }}/snyk_container_results.json
+          else
+            echo "❌ Snyk scan report not found, skipping upload."
+          fi
