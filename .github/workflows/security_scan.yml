@@ -1,4 +1,4 @@
-name: Secure Web Security Scan
+name: Automated Cloud Security Scanner
 
 on:
   push:
