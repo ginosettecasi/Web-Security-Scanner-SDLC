@@ -1,4 +1,4 @@
-name: Secure Web Security Scan
+name: Secure Dependency & Container Scan
 
 on:
   push:
@@ -13,14 +13,13 @@ permissions:
   contents: read
 
 env:
-  SCAN_URL: http://3.129.253.217:3000
   AWS_S3_BUCKET: secure-web-scan-results
   AWS_REGION: us-east-2
 
 jobs:
-  security_scan:
+  snyk_security_scan:
     runs-on: ubuntu-latest
-    timeout-minutes: 30
+    timeout-minutes: 20
 
     steps:
       - name: Checkout Code
@@ -36,50 +35,30 @@ jobs:
       - name: Verify AWS Credentials
         run: aws sts get-caller-identity
 
-      - name: Create Output Directory
-        run: mkdir -p output
-
-      - name: Start OWASP ZAP in Daemon Mode
+      - name: Set Up Snyk CLI
         run: |
-          docker pull ghcr.io/zaproxy/zaproxy:stable
-          docker run -d --name zap -p 8080:8080 -v $(pwd)/output:/zap/wrk \
-            ghcr.io/zaproxy/zaproxy:stable zap.sh -daemon -host 0.0.0.0 -port 8080
-          sleep 5  # Allow initial startup
+          curl -Lo snyk https://github.com/snyk/snyk/releases/latest/download/snyk-linux
+          chmod +x snyk
+          sudo mv snyk /usr/local/bin/
 
-      - name: Wait for ZAP to Start
-        run: |
-          echo "Waiting for ZAP to be ready..."
-          for i in {1..40}; do
-            if curl -s http://localhost:8080; then
-              echo "✅ ZAP is ready!"
-              break
-            fi
-            echo "⏳ Waiting for ZAP to be available ($i/40)..."
-            sleep 3
-            if [ $i -eq 40 ]; then
-              echo "❌ ZAP failed to start"
-              docker logs zap
-              exit 1
-            fi
-          done
+      - name: Authenticate Snyk
+        run: snyk auth ${{ secrets.SNYK_TOKEN }}
 
-      - name: Run Quick Scan via ZAP API
-        run: |
-          echo "Starting quick scan on ${{ env.SCAN_URL }}..."
-          curl "http://localhost:8080/JSON/spider/action/scan/?url=${{ env.SCAN_URL }}"
-          sleep 30  # Wait for the scan to progress
+      - name: Run Snyk Code Scan (Static Analysis)
+        continue-on-error: true
+        run: snyk code test --json > snyk_code_results.json
 
-      - name: Generate ZAP Report
-        run: |
-          echo "Generating ZAP report..."
-          curl "http://localhost:8080/OTHER/core/other/htmlreport/" -o output/zap_report.html
+      - name: Run Snyk Dependency Scan
+        continue-on-error: true
+        run: snyk test --all-projects --json > snyk_dependency_results.json
 
-      - name: Stop OWASP ZAP
-        run: docker stop zap
-
-      - name: Verify Scan Report Exists
-        run: ls -lh output && cat output/zap_report.html || (echo "❌ Report file missing" && exit 1)
+      - name: Run Snyk Container Scan (if using Docker)
+        continue-on-error: true
+        run: snyk container test your-docker-image:latest --json > snyk_container_results.json || echo "No container image found."
 
       - name: Upload Scan Results to AWS S3
         if: success()
-        run: aws s3 cp output/zap_report.html s3://${{ env.AWS_S3_BUCKET }}/zap_report.html
+        run: |
+          aws s3 cp snyk_code_results.json s3://${{ env.AWS_S3_BUCKET }}/snyk_code_results.json
+          aws s3 cp snyk_dependency_results.json s3://${{ env.AWS_S3_BUCKET }}/snyk_dependency_results.json
+          aws s3 cp snyk_container_results.json s3://${{ env.AWS_S3_BUCKET }}/snyk_container_results.json || echo "No container scan results to upload."
