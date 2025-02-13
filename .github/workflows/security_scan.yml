@@ -34,6 +34,9 @@ jobs:
       - name: Check EC2 Connection
         run: curl -I http://3.129.253.217:3000 || echo "❌ Failed to connect to EC2"
 
+      - name: Create Output Directory
+        run: mkdir -p zap_output
+
       - name: Run OWASP ZAP Scan
         run: |
           docker pull ghcr.io/zaproxy/zaproxy:stable
@@ -56,6 +59,7 @@ jobs:
         run: |
           if [ ! -f "zap_output/zap_report.html" ]; then
             echo "❌ ZAP report not found!"
+            ls -lah zap_output
             exit 1
           fi
 
@@ -75,6 +79,9 @@ jobs:
         with:
           role-to-assume: arn:aws:iam::615299768374:role/GitHubActionsSecurityRole
           aws-region: us-east-2
+
+      - name: Download Scan Report from Previous Job
+        run: mkdir -p zap_output && cp ${{ needs.setup_environment.outputs.zap_report_path }} zap_output/zap_report.html || echo "⚠️ Report missing"
 
       - name: Ensure Report Exists Before Upload
         run: |
