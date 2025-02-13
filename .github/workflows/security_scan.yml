@@ -12,19 +12,24 @@ permissions:
   id-token: write
   contents: read
 
+env:
+  AWS_S3_BUCKET: secure-web-scan-results
+  AWS_REGION: us-east-2
+
 jobs:
   setup_environment:
     runs-on: ubuntu-latest
 
     steps:
       - name: Checkout Code
-        uses: actions/checkout@v4  # Updated to v4
+        uses: actions/checkout@v4
 
       - name: Configure AWS Credentials
         uses: aws-actions/configure-aws-credentials@v2
         with:
-          role-to-assume: arn:aws:iam::615299768374:role/GitHubActionsSecurityRole
-          aws-region: us-east-2
+          role-to-assume: ${{ secrets.AWS_ROLE_TO_ASSUME }}
+          aws-region: ${{ env.AWS_REGION }}
+          role-session-name: GitHubActionsSession
 
       - name: Verify AWS Credentials
         run: aws sts get-caller-identity
@@ -49,16 +54,17 @@ jobs:
         continue-on-error: true
         run: snyk test --all-projects --json > output/snyk_dependency_results.json
 
-      - name: Run Snyk Container Scan (if using Docker)
-        continue-on-error: true
-        run: snyk container test your-docker-image:latest --json > output/snyk_container_results.json || echo "No container image found."
+      - name: Build and Scan Docker Image
+        run: |
+          docker build -t vulnerable-app .
+          snyk container test vulnerable-app --json > output/snyk_container_results.json || echo "No container image found."
 
       - name: Upload Snyk Scan Reports as Artifacts
         uses: actions/upload-artifact@v4
         with:
           name: snyk_scan_reports
           path: output/
-          compression-level: 0  # Prevents unnecessary compression
+          compression-level: 0
 
   upload_results:
     runs-on: ubuntu-latest
@@ -74,11 +80,11 @@ jobs:
       - name: Configure AWS Credentials
         uses: aws-actions/configure-aws-credentials@v2
         with:
-          role-to-assume: arn:aws:iam::615299768374:role/GitHubActionsSecurityRole
-          aws-region: us-east-2
+          role-to-assume: ${{ secrets.AWS_ROLE_TO_ASSUME }}
+          aws-region: ${{ env.AWS_REGION }}
 
       - name: Upload Scan Results to AWS S3
         run: |
-          aws s3 cp output/snyk_code_results.json s3://secure-web-scan-results/snyk_code_results.json
-          aws s3 cp output/snyk_dependency_results.json s3://secure-web-scan-results/snyk_dependency_results.json
-          aws s3 cp output/snyk_container_results.json s3://secure-web-scan-results/snyk_container_results.json || echo "No container scan results to upload."
+          aws s3 cp output/snyk_code_results.json s3://${{ env.AWS_S3_BUCKET }}/snyk_code_results.json
+          aws s3 cp output/snyk_dependency_results.json s3://${{ env.AWS_S3_BUCKET }}/snyk_dependency_results.json
+          aws s3 cp output/snyk_container_results.json s3://${{ env.AWS_S3_BUCKET }}/snyk_container_results.json || echo "No container scan results to upload."
