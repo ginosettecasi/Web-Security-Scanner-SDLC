@@ -29,47 +29,46 @@ jobs:
       - name: Configure AWS Credentials
         uses: aws-actions/configure-aws-credentials@v2
         with:
-          role-to-assume: arn:aws:iam::615299768374:role/GitHubActionsSecurityRole
+          role-to-assume: ${{ secrets.AWS_ROLE_TO_ASSUME }}
           aws-region: ${{ env.AWS_REGION }}
-
-      - name: Install ZAP CLI
-        run: |
-          pip install zapcli
 
       - name: Create Output Directory
         run: mkdir -p output
 
       - name: Start OWASP ZAP in Daemon Mode
         run: |
+          docker pull ghcr.io/zaproxy/zaproxy:stable
           docker run -d --name zap -p 8080:8080 -v $(pwd)/output:/zap/wrk \
             ghcr.io/zaproxy/zaproxy:stable zap.sh -daemon -host 0.0.0.0 -port 8080
+          sleep 5  # Allow initial startup
 
       - name: Wait for ZAP to Start
         run: |
-          for i in {1..10}; do
-            if zap-cli --zap-url http://localhost:8080 healthcheck --timeout 60; then
+          echo "Waiting for ZAP to be ready..."
+          for i in {1..40}; do
+            if curl -s http://localhost:8080; then
               echo "✅ ZAP is ready!"
               break
             fi
-            echo "⏳ Waiting for ZAP to be available ($i/10)..."
-            docker logs zap
-            sleep 6
-            if [ $i -eq 10 ]; then
+            echo "⏳ Waiting for ZAP to be available ($i/40)..."
+            sleep 3
+            if [ $i -eq 40 ]; then
               echo "❌ ZAP failed to start"
+              docker logs zap
               exit 1
             fi
           done
 
-      - name: Run Quick Scan via ZAP CLI
+      - name: Run Quick Scan via ZAP API
         run: |
           echo "Starting quick scan on ${{ env.SCAN_URL }}..."
-          zap-cli --zap-url http://localhost:8080 quick-scan --spider --scanners all ${{ env.SCAN_URL }}
-          echo "✅ Scan completed!"
+          curl "http://localhost:8080/JSON/spider/action/scan/?url=${{ env.SCAN_URL }}"
+          sleep 30  # Wait for the scan to progress
 
       - name: Generate ZAP Report
         run: |
           echo "Generating ZAP report..."
-          zap-cli --zap-url http://localhost:8080 report -o output/zap_report.html -f html
+          curl "http://localhost:8080/OTHER/core/other/htmlreport/" -o output/zap_report.html
 
       - name: Stop OWASP ZAP
         run: docker stop zap
