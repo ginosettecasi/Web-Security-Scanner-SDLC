@@ -13,82 +13,31 @@ permissions:
   contents: read
 
 jobs:
-  setup_environment:
+  security_scan:
     runs-on: ubuntu-latest
 
     steps:
       - name: Checkout Code
         uses: actions/checkout@v4
 
-      - name: Check Docker Installation
-        run: |
-          docker --version || echo "❌ Docker is not installed!"
-          docker info || echo "❌ Docker is not running!"
-
       - name: Configure AWS Credentials
         uses: aws-actions/configure-aws-credentials@v2
         with:
           role-to-assume: arn:aws:iam::615299768374:role/GitHubActionsSecurityRole
           aws-region: us-east-2
-
-      - name: Check EC2 Connection
-        run: curl -I http://3.129.253.217:3000 || echo "❌ Failed to connect to EC2"
 
       - name: Create Output Directory
         run: mkdir -p output
 
       - name: Run OWASP ZAP Scan
         run: |
-          docker pull ghcr.io/zaproxy/zaproxy:stable
           docker run --rm -v $(pwd)/output:/zap/wrk ghcr.io/zaproxy/zaproxy:stable zap.sh \
             -quickurl http://3.129.253.217:3000 \
             -quickprogress \
-            -quickout /zap/wrk/zap_report.html \
-            -cmd \
-            -config scanner.attackMode=false \
-            -config passiveScan.enable=true \
-            -config spider.maxDepth=1 \
-            -config ajaxSpider.enable=false \
-            -config passiveScan.maxAlertsPerRule=3 \
-            -config api.debug=false \
-            -config connection.requestTimeout=2000 \
-            -config connection.timeoutInSecs=5 \
-            -config scanner.threadPerHost=1
+            -quickout /zap/wrk/zap_report.html
 
       - name: Verify Scan Report Exists
-        run: ls -lh output && cat output/zap_report.html || echo "❌ Report file missing"
-
-      - name: Upload Scan Report as Artifact
-        uses: actions/upload-artifact@v4
-        with:
-          name: zap_report
-          path: output/zap_report.html
-
-  upload_results:
-    runs-on: ubuntu-latest
-    needs: setup_environment
-
-    steps:
-      - name: List Available Artifacts
-        run: gh api repos/${{ github.repository }}/actions/runs/${{ github.run_id }}/artifacts
-        env:
-          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-
-      - name: Download Scan Report
-        uses: actions/download-artifact@v4
-        with:
-          name: zap_report
-          path: output
-
-      - name: Verify Downloaded Report
-        run: ls -lh output && cat output/zap_report.html || echo "❌ Downloaded file missing"
-
-      - name: Configure AWS Credentials
-        uses: aws-actions/configure-aws-credentials@v2
-        with:
-          role-to-assume: arn:aws:iam::615299768374:role/GitHubActionsSecurityRole
-          aws-region: us-east-2
+        run: ls -lh output && cat output/zap_report.html || (echo "❌ Report file missing" && exit 1)
 
       - name: Upload Scan Results to AWS S3
-        run: |
-          aws s3 cp output/zap_report.html s3://secure-web-scan-results/zap_report.html
+        run: aws s3 cp output/zap_report.html s3://secure-web-scan-results/zap_report.html
