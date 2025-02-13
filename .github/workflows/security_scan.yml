@@ -29,10 +29,23 @@ jobs:
       - name: Create Output Directory
         run: mkdir -p output
 
-      - name: Run OWASP ZAP Scan in Headless Mode
+      - name: Start OWASP ZAP in Daemon Mode
         run: |
-          docker run --rm -v $(pwd)/output:/zap/wrk ghcr.io/zaproxy/zaproxy:stable zap.sh \
-            -cmd -quickurl http://3.129.253.217:3000 -quickout /zap/wrk/zap_report.html
+          docker run -d --name zap -v $(pwd)/output:/zap/wrk \
+            ghcr.io/zaproxy/zaproxy:stable zap.sh -daemon -host 0.0.0.0 -port 8080
+          sleep 10  # Give ZAP time to start
+
+      - name: Run Active Scan via ZAP API
+        run: |
+          curl "http://localhost:8080/JSON/ascan/action/scan/?url=http://3.129.253.217:3000"
+          sleep 60  # Wait for scan to complete (adjust time if needed)
+
+      - name: Generate ZAP Report
+        run: |
+          curl "http://localhost:8080/OTHER/core/other/htmlreport/" -o output/zap_report.html
+
+      - name: Stop OWASP ZAP
+        run: docker stop zap
 
       - name: Verify Scan Report Exists
         run: ls -lh output && cat output/zap_report.html || (echo "❌ Report file missing" && exit 1)
