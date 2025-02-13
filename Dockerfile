@@ -29,13 +29,13 @@ RUN apt-get update && apt-get install -y \
 RUN python -m ensurepip
 RUN python -m pip install --no-cache-dir --upgrade pip setuptools wheel
 
-# 🔥 Critical Debugging: Ensure Python Can Reach Package Sources
-RUN python -m pip install --no-cache-dir -r /app/requirements.txt --verbose || \
+# 🔥 Critical Debugging: Capture Full pip Install Logs
+RUN python -m pip install --no-cache-dir -r /app/requirements.txt --verbose > /app/pip_install.log 2>&1 || \
     (echo "❌ PIP INSTALL FAILED! Dumping logs..." && \
     python -m pip --version && \
     python --version && \
-    python -m pip debug --verbose && \
-    cat /app/requirements.txt && exit 1)
+    cat /app/pip_install.log && \
+    exit 1)
 
 # Expose application port
 EXPOSE 5000
