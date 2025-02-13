@@ -20,7 +20,18 @@ jobs:
       - name: Checkout Code
         uses: actions/checkout@v3
 
+      - name: Check for Existing Docker Installation
+        id: docker-check
+        run: |
+          if command -v docker &> /dev/null; then
+            echo "Docker is already installed."
+            echo "skip-docker-install=true" >> $GITHUB_ENV
+          else
+            echo "skip-docker-install=false" >> $GITHUB_ENV
+          fi
+
       - name: Remove Conflicting Docker Packages (If Any)
+        if: env.skip-docker-install == 'false'
         run: |
           sudo apt-get remove -y containerd containerd.io docker docker-engine docker.io docker-ce docker-ce-cli
           sudo apt-get autoremove -y
@@ -28,6 +39,7 @@ jobs:
           sudo groupdel docker || true
 
       - name: Install Docker (Fixed)
+        if: env.skip-docker-install == 'false'
         run: |
           sudo apt-get update
           sudo apt-get install -y ca-certificates curl gnupg lsb-release
@@ -38,6 +50,7 @@ jobs:
           sudo apt-get install -y docker-ce docker-ce-cli containerd.io
 
       - name: Grant Docker Permissions
+        if: env.skip-docker-install == 'false'
         run: |
           sudo chmod 666 /var/run/docker.sock
           sudo usermod -aG docker $USER
@@ -51,6 +64,7 @@ jobs:
         with:
           role-to-assume: arn:aws:iam::615299768374:role/GitHubActionsSecurityRole
           aws-region: us-east-2
+        retry: 3
 
       - name: Debug EC2 Connectivity
         run: |
