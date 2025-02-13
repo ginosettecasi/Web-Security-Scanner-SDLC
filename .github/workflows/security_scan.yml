@@ -35,12 +35,12 @@ jobs:
         run: curl -I http://3.129.253.217:3000 || echo "❌ Failed to connect to EC2"
 
       - name: Create Output Directory
-        run: mkdir -p zap_output
+        run: mkdir -p output
 
       - name: Run OWASP ZAP Scan
         run: |
           docker pull ghcr.io/zaproxy/zaproxy:stable
-          docker run --rm -v $PWD/zap_output:/zap/wrk ghcr.io/zaproxy/zaproxy:stable zap.sh \
+          docker run --rm -v $(pwd)/output:/zap/wrk ghcr.io/zaproxy/zaproxy:stable zap.sh \
             -quickurl http://3.129.253.217:3000 \
             -quickprogress \
             -quickout /zap/wrk/zap_report.html \
@@ -55,32 +55,22 @@ jobs:
             -config connection.timeoutInSecs=5 \
             -config scanner.threadPerHost=1
 
-      - name: Debug: Check if Report Exists Inside Docker Container
-        run: |
-          docker run --rm -v $PWD/zap_output:/zap/wrk ghcr.io/zaproxy/zaproxy:stable ls -lah /zap/wrk
-
-      - name: Verify ZAP Report Exists After Scan
-        run: |
-          if [ ! -f "zap_output/zap_report.html" ]; then
-            echo "❌ ZAP report not found! Listing contents of zap_output:"
-            ls -lah zap_output
-            exit 1
-          fi
-
-      - name: Upload ZAP Report as Artifact (for debugging)
+      - name: Upload Scan Report as Artifact
         uses: actions/upload-artifact@v3
         with:
-          name: zap_scan_report
-          path: zap_output/zap_report.html
-          retention-days: 7
+          name: zap_report
+          path: output/zap_report.html
 
   upload_results:
     runs-on: ubuntu-latest
     needs: setup_environment
 
     steps:
-      - name: Checkout Code
-        uses: actions/checkout@v3
+      - name: Download Scan Report
+        uses: actions/download-artifact@v3
+        with:
+          name: zap_report
+          path: output
 
       - name: Configure AWS Credentials
         uses: aws-actions/configure-aws-credentials@v2
@@ -88,20 +78,6 @@ jobs:
           role-to-assume: arn:aws:iam::615299768374:role/GitHubActionsSecurityRole
           aws-region: us-east-2
 
-      - name: Download Scan Report from Previous Job
-        uses: actions/download-artifact@v3
-        with:
-          name: zap_scan_report
-          path: zap_output
-
-      - name: Debug: Ensure Report Exists Before Upload
-        run: |
-          if [ ! -f "zap_output/zap_report.html" ]; then
-            echo "❌ ZAP report not found! Listing contents:"
-            ls -lah zap_output
-            exit 1
-          fi
-
       - name: Upload Scan Results to AWS S3
         run: |
-          aws s3 cp zap_output/zap_report.html s3://secure-web-scan-results/zap_report.html
+          aws s3 cp output/zap_report.html s3://secure-web-scan-results/zap_report.html
